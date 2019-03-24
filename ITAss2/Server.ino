@@ -1,7 +1,4 @@
 void _ServerSetup(){
-  Serial.begin(115200);
-  delay(10);
- 
   pinMode(ledPin, OUTPUT);
   digitalWrite(ledPin, LOW);
  
