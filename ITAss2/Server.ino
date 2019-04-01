@@ -1,85 +1,86 @@
 void _ServerSetup(){
-  pinMode(ledPin, OUTPUT);
-  digitalWrite(ledPin, LOW);
- 
-  // Connect to WiFi network
-  Serial.println();
-  Serial.println();
-  Serial.print("Connecting to ");
-  Serial.println(ssid);
- 
+  // Connect to WiFi access point.
+  Serial.print("Connecting to "); Serial.println(ssid);
+  
   WiFi.begin(ssid, password);
- 
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
   }
-  Serial.println("");
+  Serial.println();
+
   Serial.println("WiFi connected");
- 
-  // Start the server
-  server.begin();
-  Serial.println("Server started");
- 
-  // Print the IP address
-  Serial.print("Use this URL to connect: ");
-  Serial.print("http://");
-  Serial.print(WiFi.localIP());
-  Serial.println("/");
+  Serial.println("IP address: "); Serial.println(WiFi.localIP());
+
+  
+  configTime(timezone * 3600, 0, "pool.ntp.org", "time.nist.gov");
+  Serial.println("Waiting for time");
+  while(!time(nullptr)){
+    Serial.print(".");
+    delay(1000);
+  }
+
+  t = time(nullptr);
+  _time = (localtime(&t));
+  
+  // Setup MQTT subscription for feed.
+  mqtt.subscribe(&s_waterPlant);
+  mqtt.subscribe(&s_updateSensor);
 }
+
 void _Server(){
-  // Check if a client has connected
-  WiFiClient client = server.available();
-  if (!client) {
+  MQTT_connect();
+
+  //Subscriptions
+  Adafruit_MQTT_Subscribe *subscription;
+  while ((subscription = mqtt.readSubscription(5000))) {
+    if (subscription == &s_waterPlant) {
+      Pump();
+    }
+    if (subscription == &s_updateSensor){
+      bme280();
+      lightSensor();
+      soilSensor();
+    }
+  }
+
+  //publishing
+  if (_time->tm_min >= publishTimer){
+    publishTimer = (_time->tm_min + publishWaitTime + 60) % 60;
+    t_temp.publish(temperature);
+    t_pressure.publish(pressure);
+    t_humidity.publish(humidity);
+    t_light.publish(lightValue);
+    t_soil.publish(soilValue);\
+    Serial.println("Publish values");
+  }
+
+  //time
+  t = time(nullptr);
+  _time = (localtime(&t));
+}
+
+void MQTT_connect() {
+  int8_t ret;
+
+  // Stop if already connected.
+  if (mqtt.connected()) {
     return;
   }
- 
-  // Wait until the client sends some data
-  Serial.println("new client");
-  while(!client.available()){
-    delay(1);
+
+  Serial.print("Connecting to MQTT... ");
+
+  uint8_t retries = 3;
+  while ((ret = mqtt.connect()) != 0) { // connect will return 0 for connected
+       Serial.println(mqtt.connectErrorString(ret));
+       Serial.println("Retrying MQTT connection in 5 seconds...");
+       mqtt.disconnect();
+       delay(5000);  // wait 5 seconds
+       retries--;
+       if (retries == 0) {
+         // basically die and wait for WDT to reset me
+         while (1);
+       }
   }
- 
-  // Read the first line of the request
-  String request = client.readStringUntil('\r');
-  Serial.println(request);
-  client.flush();
- 
-  // Match the request
- 
-  int value = LOW;
-  if (request.indexOf("/LED=ON") != -1)  {
-    digitalWrite(ledPin, HIGH);
-    value = HIGH;
-  }
-  if (request.indexOf("/LED=OFF") != -1)  {
-    digitalWrite(ledPin, LOW);
-    value = LOW;
-  }
- 
-// Set ledPin according to the request
-//digitalWrite(ledPin, value);
- 
-  // Return the response
-  client.println("HTTP/1.1 200 OK");
-  client.println("Content-Type: text/html");
-  client.println(""); //  do not forget this one
-  client.println("<!DOCTYPE HTML>");
-  client.println("<html>");
- 
-  client.print("Led is now: ");
- 
-  if(value == HIGH) {
-    client.print("On");
-  } else {
-    client.print("Off");
-  }
-  client.println("<br><br>");
-  client.println("<a href=\"/LED=ON\"\"><button>On </button></a>");
-  client.println("<a href=\"/LED=OFF\"\"><button>Off </button></a><br />");  
-  client.println("</html>");
- 
-  delay(1);
-  Serial.println("Client disonnected");
-  Serial.println("");
+  Serial.println("MQTT Connected!");
 }

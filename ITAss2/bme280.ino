@@ -1,23 +1,9 @@
 void bme280Setup(){
+  Wire.begin(D6,D5);
   bme.begin(0x76);
 }
 void bme280(){
-  Serial.print("Temperature = ");
-  Serial.print(bme.readTemperature());
-  Serial.println("*C");
-
-  Serial.print("Pressure = ");
-  Serial.print(bme.readPressure() / 100.0F);
-  Serial.println("hPa");
-
-  Serial.print("Approx. Altitude = ");
-  Serial.print(bme.readAltitude(SEALEVELPRESSURE_HPA));
-  Serial.println("m");
-
-  Serial.print("Humidity = ");
-  Serial.print(bme.readHumidity());
-  Serial.println("%");
-
-  Serial.println();
-  delay(1000);
+  temperature = bme.readTemperature();
+  pressure = bme.readPressure() / 100.0F;
+  humidity = bme.readHumidity();
 }
